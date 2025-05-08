@@ -1,0 +1,32 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "flask-auth"
+version = "0.1.0"
+description = "A Flask authentication addon for easy user authentication and role-based access control"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+authors = [
+    { name = "Evan Vera", email = "evan.vera@hotmail.com" }
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+dependencies = [
+    "flask>=2.0.0",
+    "pyjwt>=2.0.0",
+    "sqlalchemy>=1.4.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/flask_auth"]
