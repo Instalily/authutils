@@ -3,9 +3,9 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "flask-auth"
+name = "authutils"
 version = "0.1.0"
-description = "A Flask authentication addon for easy user authentication and role-based access control"
+description = "A modular authentication library that provides easy token-based authentication and info-based access control"
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"

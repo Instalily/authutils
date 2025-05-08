@@ -1,150 +1,202 @@
-# Flask Auth
+# AuthUtils
 
-A Flask authentication addon that provides easy user authentication and role-based access control for your Flask applications.
+A modular authentication library that provides easy token-based authentication and info-based access control. Currently supports Flask with plans to add support for FastAPI and other frameworks.
 
 ## Features
 
+- Modular design with framework-agnostic core
 - JWT-based authentication
-- Role-based access control
-- Flexible token types (access, refresh, or custom)
-- Easy integration with existing Flask applications
+- Flexible info-based access control
+- Framework-specific adapters (Flask support included)
+- Easy integration with existing applications
 
 ## Installation
 
 ```bash
-pip install flask-auth
+pip install authutils
 ```
 
 ## Quick Start
 
+### Core Usage (Framework Agnostic)
+
+```python
+from authutils import AuthConfig, generate_token, verify_token, require_info
+
+# Create auth configuration
+auth_config = AuthConfig(
+    secret_key="your-secret-key",  # Optional, will generate one if not provided
+    algorithm="HS256"  # Optional, defaults to HS256
+)
+
+# Generate a token
+token = generate_token(
+    user_id="user123",
+    info={
+        "role": "admin",
+        "permissions": ["read", "write"],
+        "department": "engineering"
+    },
+    auth_config=auth_config
+)
+
+# Verify a token
+payload = verify_token(token, auth_config)
+if payload:
+    user_id = payload["user_id"]
+    info = payload["info"]
+
+# Use the require_info decorator
+@require_info({"role": ["admin"]})
+def protected_function(payload, *args, **kwargs):
+    return f"Hello {payload['user_id']}!"
+```
+
+### Flask Integration
+
 ```python
 from flask import Flask
-from flask_auth import init_auth, require_role, generate_token, verify_token
+from authutils import init_flask_auth, flask_require_info
 
 app = Flask(__name__)
 
-# Initialize the auth system
-init_auth(app)
+# Initialize Flask integration
+auth_config = init_flask_auth(app)
 
 @app.route('/login', methods=['POST'])
 def login():
-    # Implement your own authentication logic here
-    # For example, you might:
-    # - Check credentials against a database
-    # - Verify OAuth tokens
-    # - Validate API keys
-    # - etc.
-    
-    user_id = 1  # Get this from your authentication logic
-    role = "admin"  # Get this from your authentication logic
-    
-    # Generate access token
-    access_token = generate_token(
-        user_id=user_id,
-        role=role,
-        token_type="access",
-        app=app,
-        expires_in_minutes=60
-    )
-    
-    # Generate refresh token
-    refresh_token = generate_token(
-        user_id=user_id,
-        role=role,
-        token_type="refresh",
-        app=app,
-        expires_in_minutes=60 * 24 * 7  # 7 days
-    )
-    
-    return {
-        "access_token": access_token,
-        "refresh_token": refresh_token
+    # Your authentication logic here
+    user_id = "user123"
+    user_info = {
+        "role": "admin",
+        "permissions": ["read", "write"],
+        "department": "engineering"
     }
-
-@app.route('/refresh', methods=['POST'])
-def refresh():
-    refresh_token = request.json.get('refresh_token')
-    if not refresh_token:
-        return {"message": "Refresh token required"}, 400
-        
-    # Verify the refresh token
-    payload = verify_token(refresh_token, app, expected_type="refresh")
-    if not payload:
-        return {"message": "Invalid refresh token"}, 401
     
-    # Generate new access token
-    new_access_token = generate_token(
-        user_id=payload["user_id"],
-        role=payload["role"],
-        token_type="access",
-        app=app
+    # Generate token
+    token = generate_token(
+        user_id=user_id,
+        info=user_info,
+        auth_config=auth_config
     )
-        
-    return {"access_token": new_access_token}
+    
+    return {"token": token}
 
-@app.route('/protected')
-@require_role(["admin"])
-def protected_route():
-    return {"message": "This is a protected route"}
+@app.route('/admin')
+@flask_require_info({"role": ["admin"]})
+def admin_route(payload, *args, **kwargs):
+    return {"message": f"Hello {payload['user_id']}!"}
+
+@app.route('/engineering')
+@flask_require_info({
+    "role": ["admin", "engineer"],
+    "department": ["engineering"]
+})
+def engineering_route(payload, *args, **kwargs):
+    return {"message": "Engineering department only"}
 ```
 
 ## Documentation
 
-### Initialization
+### Core Components
 
-The package requires a Flask application and will automatically generate a secure secret key if one isn't provided:
+The library is designed with a modular architecture:
+
+1. **Core Authentication (`auth.py`)**
+   - `AuthConfig`: Configuration class for authentication settings
+   - `generate_token`: Create JWT tokens with custom info
+   - `verify_token`: Verify token validity
+   - `validate_token_claims`: Validate token info against requirements
+
+2. **Access Control (`decorators.py`)**
+   - `require_info`: Framework-agnostic decorator for access control
+   - Validates token info against expected values
+
+3. **Framework Adapters**
+   - `flask_adapter.py`: Flask-specific integration
+   - More adapters planned for FastAPI and other frameworks
+
+### Configuration
+
+The `AuthConfig` class provides flexible configuration options:
 
 ```python
-init_auth(app)
+config = AuthConfig(
+    secret_key="your-secret-key",  # Optional
+    algorithm="HS256"  # Optional
+)
 ```
-
-### Authentication
-
-This package provides the token management and role-based access control, but leaves the actual authentication method up to you. You can implement any authentication method you prefer, such as:
-- Password-based authentication
-- OAuth
-- API keys
-- Social login
-- Custom authentication methods
-
-The only requirement is that your authentication logic must provide a `user_id` and `role` to generate the JWT tokens.
 
 ### Token Management
 
-Generate tokens (access, refresh, or custom type):
+Generate tokens with custom info:
 ```python
 token = generate_token(
-    user_id=user_id,
-    role=role,
-    token_type="access",  # or "refresh" or any custom type
-    app=app,
-    expires_in_minutes=60
+    user_id="user123",
+    info={
+        "role": "admin",
+        "permissions": ["read", "write"]
+    },
+    auth_config=auth_config
 )
 ```
 
 Verify tokens:
 ```python
-payload = verify_token(token, app, expected_type="access")
+payload = verify_token(token, auth_config)
 if payload:
     user_id = payload["user_id"]
-    role = payload["role"]
+    info = payload["info"]
 ```
 
-### Authentication Decorators
+### Access Control
 
-The package provides a `@require_role` decorator that can be used to protect routes:
+The `require_info` decorator provides flexible access control:
 
 ```python
-@app.route('/admin')
-@require_role(["admin"])
-def admin_route():
-    return {"message": "Admin only"}
+# Simple role check
+@require_info({"role": ["admin"]})
+def admin_function(payload, *args, **kwargs):
+    pass
+
+# Multiple conditions
+@require_info({
+    "role": ["admin", "manager"],
+    "permissions": ["write"]
+})
+def management_function(payload, *args, **kwargs):
+    pass
 ```
 
-### Configuration
+### Flask Integration
 
-The package automatically:
-- Generates a secure `AUTH_SECRET_KEY` if one isn't provided
+The Flask adapter provides seamless integration:
+
+```python
+# Initialize
+auth_config = init_flask_auth(app)
+
+# Use decorator
+@app.route('/protected')
+@flask_require_info({"role": ["admin"]})
+def protected_route(payload, *args, **kwargs):
+    return {"message": "Protected route"}
+```
+
+### Future Framework Support
+
+Planned framework integrations:
+- FastAPI
+- Django
+- More to come...
+
+## Contributing
+
+Contributions are welcome! Areas for contribution include:
+- New framework adapters
+- Additional authentication methods
+- Enhanced token validation
+- Documentation improvements
 
 ## License
 
