@@ -173,12 +173,9 @@ def management_function(payload, *args, **kwargs):
 The Flask adapter provides seamless integration:
 
 ```python
-# Initialize
-auth_config = init_flask_auth(app)
-
 # Use decorator
 @app.route('/protected')
-@flask_require_info({"role": ["admin"]})
+@flask_require_info({"role": ["admin"]}, auth_config)
 def protected_route(payload, *args, **kwargs):
     return {"message": "Protected route"}
 ```

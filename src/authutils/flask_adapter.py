@@ -8,7 +8,7 @@ def flask_require_info(expected_info=None, auth_config: AuthConfig = None):
         @require_info(expected_info)
         @wraps(flask_handler)
         def wrapper_flask(*args, **kwargs):
-            cfg = auth_config or get_auth_config(current_app)
+            cfg = auth_config
             if not cfg:
                 return jsonify({"error": "server_error", "message": "Missing AuthConfig"}), 500
 
