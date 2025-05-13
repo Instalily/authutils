@@ -27,10 +27,9 @@ src/authutils/
 │   └── token_utils.py      # JWT token generation and verification
 ├── managed/
 │   ├── __init__.py
-│   ├── registry.py         # Provider registry and token management
-│   ├── exchange.py         # Token exchange functionality
+│   ├── registry.py         # Provider registry and token operations
 │   ├── models.py           # Data models and types
-│   └── providers/          # Provider implementations
+│   └── services/          # Provider implementations
 │       ├── __init__.py
 │       └── google.py       # Google OAuth2 implementation
 ```
@@ -115,13 +114,15 @@ The library is organized into two main modules:
      - `verify_token`: Verify token validity
 
 2. **Managed Authentication (`managed/`)**
-   - `registry.py`: Central registry for managing authentication providers
-   - `exchange.py`: Handles token exchange and refresh operations
+   - `registry.py`: Central registry for managing providers and handling token operations
+     - Provider registration and management
+     - Token exchange and refresh operations
+     - Token verification
    - `models.py`: Defines data structures and types
      - `AccessTokenRequest`: Request model for authorization code exchange
      - `RefreshTokenRequest`: Request model for token refresh
      - `AuthServiceEnum`: Enum for supported authentication services
-   - `providers/`: Contains provider-specific implementations
+   - `services/`: Contains provider-specific implementations
      - `google.py`: Google OAuth2 implementation
 
 ### Configuration

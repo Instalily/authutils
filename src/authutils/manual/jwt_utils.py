@@ -37,14 +37,14 @@ class JWTConfig:
         self.subject = subject
         self.jwt_id = jwt_id
 
-def generate_token(payload: dict, auth_config: AuthConfig, token_config: Optional[TokenConfig] = None, expires_in_minutes: int = 60) -> str:
+def generate_token(payload: dict, auth_config: AuthConfig, jwt_config: JWTConfig | None = None, expires_in_minutes: int = 60) -> str:
     '''
     Generates a JWT token for the given token payload.
 
     Args:
         payload (dict): The payload to include in the token.
         auth_config (AuthConfig): The authentication configuration.
-        token_config (TokenConfig, optional): Additional token configuration including audience and access token.
+        jwt_config (JWTConfig, optional): Additional token configuration including audience and access token.
         expires_in_minutes (int): Token expiration time in minutes. Defaults to 60.
 
     Returns:
@@ -66,19 +66,19 @@ def generate_token(payload: dict, auth_config: AuthConfig, token_config: Optiona
         **payload,
     }
 
-    # Add optional claims if token_config is provided
-    if token_config:
-        if token_config.audience is not None:
-            claims["aud"] = token_config.audience
-        if token_config.not_before is not None:
-            claims["nbf"] = token_config.not_before
-        if token_config.subject is not None:
-            claims["sub"] = token_config.subject
-        if token_config.jwt_id is not None:
-            claims["jti"] = token_config.jwt_id
+    # Add optional claims if jwt_config is provided
+    if jwt_config:
+        if jwt_config.audience is not None:
+            claims["aud"] = jwt_config.audience
+        if jwt_config.not_before is not None:
+            claims["nbf"] = jwt_config.not_before
+        if jwt_config.subject is not None:
+            claims["sub"] = jwt_config.subject
+        if jwt_config.jwt_id is not None:
+            claims["jti"] = jwt_config.jwt_id
 
     # Extract access_token for at_hash calculation
-    access_token = token_config.access_token if token_config and token_config.access_token is not None else None
+    access_token = jwt_config.access_token if jwt_config and jwt_config.access_token is not None else None
 
     return jwt.encode(
         claims=claims,

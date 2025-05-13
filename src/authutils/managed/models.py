@@ -1,8 +1,4 @@
 from pydantic import BaseModel
-from enum import Enum
-
-class AuthServiceEnum(Enum):
-    GOOGLE = "google"
 
 class AccessTokenRequest(BaseModel):
     code: str

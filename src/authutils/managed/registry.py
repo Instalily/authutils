@@ -1,6 +1,6 @@
 from typing import Dict, Any
 from .services import AuthService # Import the interface
-from .models import AuthServiceEnum, AuthorizationTokenRequest, RefreshTokenRequest
+from .models import AuthServiceEnum, TokenRequest, AccessTokenRequest, RefreshTokenRequest
 from datetime import datetime, timedelta
 import httpx
 from jose import jwt, JOSEError
@@ -50,25 +50,66 @@ class AuthServiceRegistry:
         """
         return list(self._services.values())
     
-    def exchange_authorization_code(self, authorization_token_request: AuthorizationTokenRequest, auth_service: AuthServiceEnum) -> Dict[str, Any]:
+    async def exchange_code_for_tokens(
+        self,
+        token_request: TokenRequest,
+        service_type: AuthServiceEnum
+    ) -> Dict:
         """
-        Exchange a code for a token.
+        Exchanges an authorization code and PKCE verifier for tokens with the identity provider.
         """
-        service = self._services[auth_service]
-        if not service:
-            raise ValueError(f"Service not found in registry: {auth_service}")
-        
-        return service.exchange_authorization_code(authorization_token_request)
-    
-    def exchange_refresh_token(self, refresh_token_request: RefreshTokenRequest, auth_service: AuthServiceEnum) -> Dict[str, Any]:
-        """
-        Exchange a refresh token for a new access token.
-        """
-        service = self._services[auth_service]
-        if not service:
-            raise ValueError(f"Service not found in registry: {auth_service}")
-        
-        return service.exchange_refresh_token(refresh_token_request)
+        print(f"Registry: Exchanging auth code for provider: {token_request.service}")
+
+        if service_type not in self._services:
+            raise ValueError(f"Service not found in registry: {service_type}")
+
+        auth_service = self._services[service_type]
+
+        client_id = auth_service.get_client_id()
+        client_secret = auth_service.get_client_secret()
+        token_url = auth_service.get_token_url()
+
+        if isinstance(token_request, AccessTokenRequest):
+            # Construct the parameters for the POST request to the provider
+            token_exchange_params = {
+                "grant_type": "authorization_code",
+                "code": token_request.code,
+                "redirect_uri": token_request.redirect_uri,
+                "client_id": client_id,
+                "client_secret": client_secret,
+                "code_verifier": token_request.code_verifier,
+            }
+        elif isinstance(token_request, RefreshTokenRequest):
+            token_exchange_params = {
+                "grant_type": "refresh_token",
+                "refresh_token": token_request.refresh_token,
+                "client_id": client_id,
+                "client_secret": client_secret,
+            }
+        else:
+            raise ValueError(f"Invalid token request type: {type(token_request)}")
+
+        async with httpx.AsyncClient() as client:
+            try:
+                print(f"Registry: Sending token exchange request to {token_url}...")
+                provider_response = await client.post(token_url, data=token_exchange_params)
+                provider_response.raise_for_status() # Raise for bad status codes
+
+                tokens = provider_response.json()
+                print("Registry: Successfully exchanged code for tokens with provider.")
+                return tokens # Return the tokens dictionary
+
+            except httpx.HTTPStatusError as e:
+                print(f"Registry HTTP error during token exchange with provider: {e}")
+                print(f"Registry Response body: {e.response.text}")
+                # Re-raise with original error details for the endpoint to handle
+                raise ValueError(f"Provider error during code exchange: {e.response.status_code} - {e.response.text}") from e
+            except httpx.RequestError as e:
+                print(f"Registry Request error during token exchange with provider: {e}")
+                raise ValueError(f"Network error communicating with provider: {e}") from e
+            except Exception as e:
+                print(f"Registry Unexpected error during code exchange: {e}")
+                raise ValueError(f"An unexpected error occurred during code exchange: {e}") from e
     
     async def _get_jwks(self, service_type: AuthServiceEnum) -> Dict[str, Any]:
         """
@@ -100,7 +141,7 @@ class AuthServiceRegistry:
     async def verify_id_token(
         self,
         id_token: str,
-        auth_service: AuthServiceEnum
+        service_type: AuthServiceEnum
     ) -> Dict[str, Any]:
         """
         Verifies the ID token signature and claims.
@@ -120,16 +161,16 @@ class AuthServiceRegistry:
         if not id_token:
             raise ValueError("ID token is missing.")
         
-        auth_service = self._services[auth_service]
+        auth_service = self._services[service_type]
         if not auth_service:
-            raise ValueError(f"Service not found in registry: {auth_service}")
+            raise ValueError(f"Service not found in registry: {service_type}")
 
         try:
             # Verify the token signature and validate standard claims (exp, iat, nbf)
             # python-jose handles finding the correct key from the JWKS automatically
             decoded_token = jwt.decode(
                 token=id_token,
-                key=await self._get_jwks(auth_service), # Pass the JWKS dictionary
+                key=await self._get_jwks(service_type), # Pass the JWKS dictionary
                 algorithms=["RS256"], # Specify the expected signing algorithm(s)
                 issuer=auth_service.get_issuer_url(), # Validate the 'iss' claim
                 audience=auth_service.get_client_id(), # Validate the 'aud' claim
