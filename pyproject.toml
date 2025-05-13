@@ -24,7 +24,7 @@ classifiers = [
 ]
 dependencies = [
     "flask>=2.0.0",
-    "pyjwt>=2.0.0",
+    "python-jose[cryptography]>=3.3.0",
     "sqlalchemy>=1.4.0",
     "httpx>=0.28.1",
     "pydantic>=2.11.4"
