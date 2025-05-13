@@ -1,13 +1,14 @@
 # AuthUtils
 
-A modular authentication library that provides easy token-based authentication and info-based access control. Currently supports Flask with plans to add support for FastAPI and other frameworks.
+A modular authentication library that provides easy token-based authentication and info-based access control. Supports both manual token management and managed authentication with various providers.
 
 ## Features
 
 - Modular design with framework-agnostic core
 - JWT-based authentication
-- Flexible info-based access control
-- Framework-specific adapters (Flask support included)
+- Flexible info-based access control with a single decorator
+- Managed authentication with provider support (Google, more coming soon)
+- Manual token management for custom implementations
 - Easy integration with existing applications
 
 ## Installation
@@ -18,82 +19,73 @@ pip install authutils
 
 ## Quick Start
 
-### Core Usage (Framework Agnostic)
+### Manual Token Management
 
 ```python
-from authutils import AuthConfig, generate_token, verify_token, require_info
+from authutils.manual.token_utils import AuthConfig, generate_token, verify_token
 
 # Create auth configuration
 auth_config = AuthConfig(
+    provider_name="your-app",  # Required: identifies your application
     secret_key="your-secret-key",  # Optional, will generate one if not provided
     algorithm="HS256"  # Optional, defaults to HS256
 )
 
 # Generate a token
-token = generate_token(
-    user_id="user123",
-    info={
-        "role": "admin",
-        "permissions": ["read", "write"],
-        "department": "engineering"
-    },
-    auth_config=auth_config
-)
+payload = {
+    "user_id": "user123",  # Example field, can be any custom info
+    "role": "admin",
+    "permissions": ["read", "write"],
+    "department": "engineering"
+}
+
+token = generate_token(payload, auth_config, expires_in_minutes=60)  # Optional expiration
 
 # Verify a token
-payload = verify_token(token, auth_config)
-if payload:
-    user_id = payload["user_id"]
-    info = payload["info"]
-
-# Use the require_info decorator
-@require_info({"role": ["admin"]})
-def protected_function(payload, *args, **kwargs):
-    return f"Hello {payload['user_id']}!"
+verified_payload = verify_token(token, auth_config)
+if verified_payload:
+    # Access any fields from payload as needed
+    if "user_id" in verified_payload:
+        user_id = verified_payload["user_id"]
 ```
 
-### Flask Integration
+### Managed Authentication
 
 ```python
-from flask import Flask
-from authutils import init_flask_auth, flask_require_info
+from authutils.managed import AuthProviderRegistry
+from authutils.managed.providers import GoogleAuthProvider
+from authutils.managed.types import TokenRequest, AuthProviderEnum
 
-app = Flask(__name__)
+# Initialize the provider registry
+registry = AuthProviderRegistry()
 
-# Initialize Flask integration
-auth_config = init_flask_auth(app)
+# Register Google provider
+google_provider = GoogleAuthProvider(
+    client_id="your-client-id",
+    client_secret="your-client-secret"
+)
+registry.register_provider(google_provider)
 
-@app.route('/login', methods=['POST'])
-def login():
-    # Your authentication logic here
-    user_id = "user123"
-    user_info = {
-        "role": "admin",
-        "permissions": ["read", "write"],
-        "department": "engineering"
-    }
-    
-    # Generate token
-    token = generate_token(
-        user_id=user_id,
-        info=user_info,
-        auth_config=auth_config
-    )
-    
-    return {"token": token}
+# Exchange authorization code for tokens
+token_request = TokenRequest(
+    code="authorization-code",
+    code_verifier="pkce-verifier",
+    redirect_uri="your-redirect-uri",
+    provider=AuthProviderEnum.GOOGLE
+)
 
-@app.route('/admin')
-@flask_require_info({"role": ["admin"]})
-def admin_route(payload, *args, **kwargs):
-    return {"message": f"Hello {payload['user_id']}!"}
+# Exchange code for tokens
+tokens = await registry.exchange_authorization_code_for_tokens(token_request)
 
-@app.route('/engineering')
-@flask_require_info({
-    "role": ["admin", "engineer"],
-    "department": ["engineering"]
-})
-def engineering_route(payload, *args, **kwargs):
-    return {"message": "Engineering department only"}
+# Refresh tokens
+refresh_request = TokenRequest(
+    code="",  # Not needed for refresh
+    code_verifier="",  # Not needed for refresh
+    redirect_uri="your-redirect-uri",
+    provider=AuthProviderEnum.GOOGLE,
+    refresh_token="your-refresh-token"
+)
+new_tokens = await registry.exchange_refresh_token(refresh_request)
 ```
 
 ## Documentation
@@ -102,19 +94,15 @@ def engineering_route(payload, *args, **kwargs):
 
 The library is designed with a modular architecture:
 
-1. **Core Authentication (`auth.py`)**
+1. **Manual Token Management (`manual/token_utils.py`)**
    - `AuthConfig`: Configuration class for authentication settings
-   - `generate_token`: Create JWT tokens with custom info
+   - `generate_token`: Create JWT tokens from a payload dictionary
    - `verify_token`: Verify token validity
-   - `validate_token_claims`: Validate token info against requirements
 
-2. **Access Control (`decorators.py`)**
-   - `require_info`: Framework-agnostic decorator for access control
-   - Validates token info against expected values
-
-3. **Framework Adapters**
-   - `flask_adapter.py`: Flask-specific integration
-   - More adapters planned for FastAPI and other frameworks
+2. **Managed Authentication (`managed/`)**
+   - `AuthProviderRegistry`: Central registry for managing authentication providers
+   - Provider implementations (Google, more coming soon)
+   - Token exchange and refresh functionality
 
 ### Configuration
 
@@ -122,6 +110,7 @@ The `AuthConfig` class provides flexible configuration options:
 
 ```python
 config = AuthConfig(
+    provider_name="your-app",  # Required: identifies your application
     secret_key="your-secret-key",  # Optional
     algorithm="HS256"  # Optional
 )
@@ -129,70 +118,78 @@ config = AuthConfig(
 
 ### Token Management
 
-Generate tokens with custom info:
+Generate tokens with a payload dictionary:
 ```python
-token = generate_token(
-    user_id="user123",
-    info={
-        "role": "admin",
-        "permissions": ["read", "write"]
-    },
-    auth_config=auth_config
+# The payload can contain any custom fields you need
+payload = {
+    "user_id": "user123",
+    "role": "admin",
+    "permissions": ["read", "write"],
+    "custom_field": "custom_value"
+}
+
+# Generate token with default expiration (60 minutes)
+token = generate_token(payload, auth_config)
+
+# Or specify custom expiration in minutes
+token = generate_token(payload, auth_config, expires_in_minutes=120)  # 2 hour expiration
+```
+
+Note: The following fields in the payload are reserved and will be automatically managed:
+- `iat` (Issued At): Automatically set to the current timestamp
+- `exp` (Expiration): Automatically set based on `expires_in_minutes` (defaults to 60 minutes)
+- `iss` (Issuer): Automatically set to the provider_name from AuthConfig
+
+### Managed Authentication
+
+The managed authentication system provides a flexible way to integrate with various authentication providers:
+
+```python
+# Initialize registry
+registry = AuthProviderRegistry()
+
+# Register providers
+google_provider = GoogleAuthProvider(
+    client_id="your-client-id",
+    client_secret="your-client-secret"
 )
+registry.register_provider(google_provider)
+
+# Exchange authorization code
+token_request = TokenRequest(
+    code="authorization-code",
+    code_verifier="pkce-verifier",
+    redirect_uri="your-redirect-uri",
+    provider=AuthProviderEnum.GOOGLE
+)
+tokens = await registry.exchange_authorization_code_for_tokens(token_request)
+
+# Refresh tokens
+refresh_request = TokenRequest(
+    code="",
+    code_verifier="",
+    redirect_uri="your-redirect-uri",
+    provider=AuthProviderEnum.GOOGLE,
+    refresh_token="your-refresh-token"
+)
+new_tokens = await registry.exchange_refresh_token(refresh_request)
 ```
 
-Verify tokens:
-```python
-payload = verify_token(token, auth_config)
-if payload:
-    user_id = payload["user_id"]
-    info = payload["info"]
-```
+### Provider Support
 
-### Access Control
+Currently supported providers:
+- Google OAuth2
 
-The `require_info` decorator provides flexible access control:
-
-```python
-# Simple role check
-@require_info({"role": ["admin"]})
-def admin_function(payload, *args, **kwargs):
-    pass
-
-# Multiple conditions
-@require_info({
-    "role": ["admin", "manager"],
-    "permissions": ["write"]
-})
-def management_function(payload, *args, **kwargs):
-    pass
-```
-
-### Flask Integration
-
-The Flask adapter provides seamless integration:
-
-```python
-# Use decorator
-@app.route('/protected')
-@flask_require_info({"role": ["admin"]}, auth_config)
-def protected_route(payload, *args, **kwargs):
-    return {"message": "Protected route"}
-```
-
-### Future Framework Support
-
-Planned framework integrations:
-- FastAPI
-- Django
+Planned provider support:
+- GitHub
+- Microsoft
 - More to come...
 
 ## Contributing
 
 Contributions are welcome! Areas for contribution include:
-- New framework adapters
-- Additional authentication methods
-- Enhanced token validation
+- New authentication providers
+- Additional token validation features
 - Documentation improvements
 
 ## License
