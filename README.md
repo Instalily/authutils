@@ -1,15 +1,17 @@
 # AuthUtils
 
-A modular authentication library that provides easy token-based authentication and info-based access control. Supports both manual token management and managed authentication with various providers.
+A modern, framework-agnostic authentication library for Python that provides comprehensive OAuth2/OpenID Connect support with a focus on security and flexibility.
 
 ## Features
 
-- Modular design with framework-agnostic core
-- JWT-based authentication
-- Flexible info-based access control with a single decorator
-- Managed authentication with provider support (Google, more coming soon)
-- Manual token management for custom implementations
-- Easy integration with existing applications
+- **Framework-Agnostic Core**: Core authentication logic is independent of any specific web framework
+- **Provider Management**: Centralized registry for managing multiple authentication providers
+- **Token Management**: Comprehensive token handling including PKCE, JWKS, and token exchange
+- **Framework Integrations**: Built-in support for FastAPI (REST and WebSocket)
+- **Storage Flexibility**: Pluggable storage backends for PKCE and JWKS
+- **Security First**: Built-in support for PKCE, JWKS, and secure token verification
+- **Extensible**: Easy to add new providers and storage backends
+- **Consistent Error Handling**: Comprehensive exception hierarchy for clear error handling
 
 ## Installation
 
@@ -21,196 +23,238 @@ pip install authutils
 
 ```
 src/authutils/
-├── __init__.py
-├── manual/
-│   ├── __init__.py
-│   └── token_utils.py      # JWT token generation and verification
-├── managed/
-│   ├── __init__.py
-│   ├── registry.py         # Provider registry and token operations
-│   ├── models.py           # Data models and types
-│   └── services/          # Provider implementations
+├── __init__.py                 # Package exports and version info
+├── common/                     # Shared utilities and types
+│   ├── __init__.py            # Common module exports
+│   ├── exceptions.py          # Common exception definitions
+│   └── types/                 # Shared type definitions
 │       ├── __init__.py
-│       └── google.py       # Google OAuth2 implementation
+│       └── constants.py       # Enums and constants
+├── managed/                    # Managed authentication (OAuth2/OIDC)
+│   ├── __init__.py            # Managed module exports
+│   ├── core/                  # Core authentication logic
+│   │   ├── __init__.py
+│   │   ├── auth_flow.py      # Auth flow implementation
+│   │   ├── exchange.py       # Token exchange logic
+│   │   └── verification.py   # Token verification
+│   ├── models/               # Data models
+│   │   ├── __init__.py
+│   │   └── types.py         # Request/response types
+│   ├── providers/            # Auth providers
+│   │   ├── __init__.py
+│   │   ├── base.py          # Base provider interface
+│   │   └── google.py        # Google OAuth2 implementation
+│   ├── storage/             # Storage implementations
+│   │   ├── __init__.py
+│   │   ├── base.py         # Storage interfaces
+│   │   ├── jwks/           # JWKS storage
+│   │   └── pkce/           # PKCE storage
+│   └── integrations/        # Framework integrations
+│       ├── __init__.py
+│       ├── base.py         # Integration interface
+│       └── fastapi/        # FastAPI integration
+│           ├── __init__.py
+│           ├── rest_dependencies.py    # REST API auth
+│           └── websocket_auth.py       # WebSocket auth
+└── manual/                  # Manual authentication (future)
+```
+
+## Error Handling
+
+The library provides a comprehensive exception hierarchy for clear error handling:
+
+- `ConfigurationError`: Raised when there are issues with initialization or configuration
+- `ProviderError`: Raised for provider-related issues (validation, lookup, etc.)
+- `TokenError`: Raised for token validation and verification issues
+- `StorageError`: Raised for storage-related issues (PKCE, JWKS, etc.)
+- `AuthenticationError`: Raised for general authentication failures
+
+Example error handling:
+
+```python
+from authutils.common.exceptions import (
+    ConfigurationError,
+    ProviderError,
+    TokenError,
+    StorageError,
+    AuthenticationError
+)
+
+try:
+    # Your authentication code here
+    pass
+except TokenError as e:
+    # Handle token validation errors
+    print(f"Token validation failed: {e}")
+except ProviderError as e:
+    # Handle provider-related errors
+    print(f"Provider error: {e}")
+except StorageError as e:
+    # Handle storage-related errors
+    print(f"Storage error: {e}")
+except ConfigurationError as e:
+    # Handle configuration errors
+    print(f"Configuration error: {e}")
+except AuthenticationError as e:
+    # Handle general authentication errors
+    print(f"Authentication failed: {e}")
 ```
 
 ## Quick Start
 
-### Manual Token Management
+### Basic Setup
 
 ```python
-from authutils.manual.token_utils import JWTConfig, generate_token, verify_token
+from authutils import BackendAuthProviderRegistry, GoogleAuthProvider
+from authutils import LocalPKCEStorage, LocalJWKSStorage
+from authutils import create_fastapi_auth_dependency
 
-# Create JWT configuration
-jwt_config = JWTConfig(
-    provider_name="your-app",  # Required: identifies your application
-    secret_key="your-secret-key",  # Optional, will generate one if not provided
-    algorithm="HS256"  # Optional, defaults to HS256
+# Initialize the registry with storage implementations
+registry = BackendAuthProviderRegistry(
+    pkce_storage=LocalPKCEStorage(),
+    jwks_storage=LocalJWKSStorage()
 )
-
-# Generate a token
-payload = {
-    "user_id": "user123",  # Example field, can be any custom info
-    "role": "admin",
-    "permissions": ["read", "write"],
-    "department": "engineering"
-}
-
-token = generate_token(payload, jwt_config, expires_in_minutes=60)  # Optional expiration
-
-# Verify a token
-verified_payload = verify_token(token, jwt_config)
-if verified_payload:
-    # Access any fields from payload as needed
-    if "user_id" in verified_payload:
-        user_id = verified_payload["user_id"]
-```
-
-### Managed Authentication
-
-The managed authentication system provides a flexible way to integrate with various authentication providers:
-
-```python
-from authutils.managed.registry import AuthProviderRegistry
-from authutils.managed.providers import GoogleAuthProvider
-from authutils.managed.models import AccessTokenRequest, RefreshTokenRequest, AuthServiceEnum
-
-# Initialize registry
-registry = AuthProviderRegistry()
 
 # Register providers
-google_provider = GoogleAuthProvider(
+registry.register_provider(GoogleAuthProvider(
     client_id="your-client-id",
     client_secret="your-client-secret"
-)
-registry.register_provider(google_provider)
+))
 
-# Exchange authorization code
-access_request = AccessTokenRequest(
-    code="authorization-code",
-    code_verifier="pkce-verifier",
-    redirect_uri="your-redirect-uri"
-)
-tokens = await registry.exchange_authorization_code_for_tokens(access_request)
-
-# Refresh tokens
-refresh_request = RefreshTokenRequest(
-    refresh_token="your-refresh-token",
-    redirect_uri="your-redirect-uri"
-)
-new_tokens = await registry.exchange_refresh_token(refresh_request)
+# Create FastAPI auth dependency
+auth_dependency = create_fastapi_auth_dependency(registry)
 ```
 
-## Documentation
-
-### Core Components
-
-The library is organized into two main modules:
-
-1. **Manual Token Management (`manual/`)**
-   - `token_utils.py`: Handles JWT token generation and verification
-     - `JWTConfig`: Configuration class for JWT settings
-     - `generate_token`: Create JWT tokens from a payload dictionary
-     - `verify_token`: Verify token validity
-
-2. **Managed Authentication (`managed/`)**
-   - `registry.py`: Central registry for managing providers and handling token operations
-     - Provider registration and management
-     - Token exchange and refresh operations
-     - Token verification
-   - `models.py`: Defines data structures and types
-     - `AccessTokenRequest`: Request model for authorization code exchange
-     - `RefreshTokenRequest`: Request model for token refresh
-     - `AuthServiceEnum`: Enum for supported authentication services
-   - `services/`: Contains provider-specific implementations
-     - `google.py`: Google OAuth2 implementation
-
-### Configuration
-
-The `JWTConfig` class provides flexible configuration options:
+### FastAPI Integration
 
 ```python
-config = JWTConfig(
-    provider_name="your-app",  # Required: identifies your application
-    secret_key="your-secret-key",  # Optional
-    algorithm="HS256"  # Optional
-)
+from fastapi import FastAPI, Depends
+from authutils import create_fastapi_auth_dependency, create_fastapi_websocket_authenticator
+
+app = FastAPI()
+
+# Create dependencies
+auth_dependency = create_fastapi_auth_dependency(registry)
+websocket_auth = create_fastapi_websocket_authenticator(registry)
+
+# Protected REST endpoint
+@app.get("/api/protected")
+async def protected_route(user_claims: dict = Depends(auth_dependency)):
+    return {"message": f"Hello, {user_claims['sub']}!"}
+
+# Protected WebSocket endpoint
+@app.websocket("/ws")
+async def websocket_endpoint(
+    websocket: WebSocket,
+    user_claims: dict = Depends(websocket_auth)
+):
+    await websocket.accept()
+    # Handle WebSocket communication
 ```
 
-### Token Management
+## Core Components
 
-Generate tokens with a payload dictionary:
-```python
-# The payload can contain any custom fields you need
-payload = {
-    "user_id": "user123",
-    "role": "admin",
-    "permissions": ["read", "write"],
-    "custom_field": "custom_value"
-}
+### Provider Registry
 
-# Generate token with default expiration (60 minutes)
-token = generate_token(payload, jwt_config)
-
-# Or specify custom expiration in minutes
-token = generate_token(payload, jwt_config, expires_in_minutes=120)  # 2 hour expiration
-```
-
-Note: The following fields in the payload are reserved and will be automatically managed:
-- `iat` (Issued At): Automatically set to the current timestamp
-- `exp` (Expiration): Automatically set based on `expires_in_minutes` (defaults to 60 minutes)
-- `iss` (Issuer): Automatically set to the provider_name from JWTConfig
-
-### Managed Authentication
-
-The managed authentication system provides a flexible way to integrate with various authentication providers:
+The `BackendAuthProviderRegistry` is the central component that manages authentication providers and handles token operations:
 
 ```python
-from authutils.managed.registry import AuthProviderRegistry
-from authutils.managed.providers import GoogleAuthProvider
-from authutils.managed.models import AccessTokenRequest, RefreshTokenRequest, AuthServiceEnum
-
-# Initialize registry
-registry = AuthProviderRegistry()
-
-# Register providers
-google_provider = GoogleAuthProvider(
-    client_id="your-client-id",
-    client_secret="your-client-secret"
+registry = BackendAuthProviderRegistry(
+    pkce_storage=LocalPKCEStorage(),
+    jwks_storage=LocalJWKSStorage()
 )
-registry.register_provider(google_provider)
-
-# Exchange authorization code
-access_request = AccessTokenRequest(
-    code="authorization-code",
-    code_verifier="pkce-verifier",
-    redirect_uri="your-redirect-uri"
-)
-tokens = await registry.exchange_authorization_code_for_tokens(access_request)
-
-# Refresh tokens
-refresh_request = RefreshTokenRequest(
-    refresh_token="your-refresh-token",
-    redirect_uri="your-redirect-uri"
-)
-new_tokens = await registry.exchange_refresh_token(refresh_request)
 ```
 
-### Provider Support
+### Authentication Flow
 
-Currently supported providers:
-- Google OAuth2
+The library provides two main authentication flows:
 
-Planned provider support:
-- GitHub
-- Microsoft
-- More to come...
+1. **Authorization Code Flow with PKCE**:
+   ```python
+   from authutils import initiate_auth_flow, process_token_exchange
+   
+   # Start the auth flow
+   auth_url, state, code_verifier = await initiate_auth_flow(
+       registry=registry,
+       provider=ProviderTypeEnum.GOOGLE,
+       redirect_uri="your-redirect-uri"
+   )
+   
+   # Process the callback
+   tokens = await process_token_exchange(
+       registry=registry,
+       code="authorization-code",
+       state=state,
+       code_verifier=code_verifier,
+       redirect_uri="your-redirect-uri"
+   )
+   ```
+
+2. **Token Verification**:
+   ```python
+   from authutils import verify_id_token
+   
+   # Verify an ID token
+   claims = await verify_id_token(
+       id_token="your-id-token",
+       auth_provider=provider,
+       jwks_storage=storage
+   )
+   ```
+
+### Storage Backends
+
+The library provides flexible storage backends for PKCE and JWKS:
+
+```python
+from authutils import LocalPKCEStorage, LocalJWKSStorage
+
+# Local in-memory storage
+pkce_storage = LocalPKCEStorage()
+jwks_storage = LocalJWKSStorage()
+
+# Custom storage implementations can be created by implementing
+# the base storage interfaces
+```
+
+## Framework Integrations
+
+### FastAPI
+
+The library provides comprehensive FastAPI integration:
+
+1. **REST API Authentication**:
+   ```python
+   from authutils import create_fastapi_auth_dependency
+   
+   auth_dependency = create_fastapi_auth_dependency(registry)
+   
+   @app.get("/api/protected")
+   async def protected_route(user_claims: dict = Depends(auth_dependency)):
+       return {"message": f"Hello, {user_claims['sub']}!"}
+   ```
+
+2. **WebSocket Authentication**:
+   ```python
+   from authutils import create_fastapi_websocket_authenticator
+   
+   websocket_auth = create_fastapi_websocket_authenticator(registry)
+   
+   @app.websocket("/ws")
+   async def websocket_endpoint(
+       websocket: WebSocket,
+       user_claims: dict = Depends(websocket_auth)
+   ):
+       await websocket.accept()
+       # Handle WebSocket communication
+   ```
 
 ## Contributing
 
 Contributions are welcome! Areas for contribution include:
 - New authentication providers
-- Additional token validation features
+- Additional storage backends
+- Framework integrations
 - Documentation improvements
 
 ## License

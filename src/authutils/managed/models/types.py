@@ -1,6 +1,6 @@
-# managed/models.py
+# managed/models/types.py
 from pydantic import BaseModel, Field # Import Field for potential aliases
-from ..common.types.constants import GrantTypeEnum, ProviderTypeEnum
+from ...common.types.constants import GrantTypeEnum, ProviderTypeEnum
 
 # --- Models for Incoming Request Body to /api/auth/token Endpoint ---
 # This model represents the data sent by the frontend to your backend's token endpoint.

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "authutils"
 version = "0.1.0"
-description = "A modular authentication library that provides easy token-based authentication and info-based access control"
+description = "A modular authentication library that provides easy token-based authentication"
 readme = "README.md"
 requires-python = ">=3.8"
 license = "MIT"
@@ -23,11 +23,10 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
 ]
 dependencies = [
-    "flask>=2.0.0",
-    "python-jose[cryptography]>=3.3.0",
-    "sqlalchemy>=1.4.0",
-    "httpx>=0.28.1",
-    "pydantic>=2.11.4"
+    "python-jose[cryptography]",
+    "httpx",
+    "pydantic",
+    "cachetools"
 ]
 
 [tool.hatch.build.targets.wheel]

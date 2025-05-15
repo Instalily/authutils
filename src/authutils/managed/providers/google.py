@@ -1,27 +1,28 @@
 # managed/providers/google.py
 from typing import Dict, Any, List
 from urllib.parse import urlencode # Helper for building query strings
-from .interface import BackendAuthService # Import the interface
-from ..models import AuthServiceEnum # Import the ProviderType Enum
+from .base import BackendAuthProvider # Import the base provider class
+from ...common.types.constants import ProviderTypeEnum # Import the AuthServiceEnum
+from ...common.exceptions import ConfigurationError
 
-class GoogleAuthService(BackendAuthService):
+class GoogleAuthProvider(BackendAuthProvider):
     """
-    Backend authentication service implementation for Google.
+    Backend authentication provider implementation for Google.
     Handles configuration and URL building for Google OAuth 2.0 / OpenID Connect.
     """
     def __init__(self, client_id: str, client_secret: str):
         # In a real app, load these securely from environment variables
         # or a secrets manager.
         if not client_id or not client_secret:
-             raise ValueError("Google Client ID and Secret must be provided.")
+             raise ConfigurationError("Google Client ID and Secret must be provided.")
         self._client_id = client_id
         self._client_secret = client_secret
 
-    def get_name(self) -> AuthServiceEnum:
+    def get_name(self) -> ProviderTypeEnum:
         """
-        Get the unique name (AuthServiceEnum member) of the auth service.
+        Get the unique name (ProviderTypeEnum member) of the auth provider.
         """
-        return AuthServiceEnum.GOOGLE
+        return ProviderTypeEnum.GOOGLE
 
     def get_client_id(self) -> str:
         """
@@ -76,13 +77,13 @@ class GoogleAuthService(BackendAuthService):
             'prompt': 'consent' # Prompt the user for consent every time (can be 'select_account' or 'none')
         }
     
-    def get_user_info_url(self) -> str:
+    def get_userinfo_url(self) -> str:
         """
         Get the user info endpoint URL for Google.
         """
         return "https://www.googleapis.com/oauth2/v3/userinfo"
 
-    def build_authorization_url(
+    def build_auth_url(
         self,
         redirect_uri: str,
         state: str,
